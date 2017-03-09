@@ -1,0 +1,8 @@
+.tab-pane {
+    my-tab-header-background: derive(-fx-text-box-border, 30%) ;
+}
+
+.tab-pane > .tab-header-area > .tab-header-background {
+    -fx-background-color: -fx-outer-border, -fx-text-box-border,
+        linear-gradient(from 0px 0px to 0px 5px, -fx-text-box-border, my-tab-header-background) ;
+}
