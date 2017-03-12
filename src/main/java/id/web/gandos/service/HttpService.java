@@ -92,6 +92,8 @@ public class HttpService {
 
                     String payload = sb.toString();
 
+                    //System.out.println( payload );
+
                     //check request pattern "method /url http-version"
                     Matcher m = REQ_START_PATTERN.matcher( payload );
 
@@ -142,7 +144,19 @@ public class HttpService {
                             }
                         }
 
+                        int idx = payload.indexOf( "...." );
+
+                        if( idx > 0 ) {
+                            if( payload.length() >= idx + 4 )
+                                result.setRequestBody( payload.substring( idx + 4 ) );
+                            else
+                                result.setRequestBody( payload.substring( idx) );
+
+                            payload = payload.substring( 0, idx );
+                        }
+
                         s = payload.split( "\\.\\." );
+
 
                         if( s != null ) {
                             List<String> rh = new ArrayList<>();
@@ -152,6 +166,8 @@ public class HttpService {
 
                             result.setRequestHeader( rh );
                         }
+
+
                     }
 
                     m = RES_START_PATTERN.matcher( payload );
@@ -171,8 +187,11 @@ public class HttpService {
                             for( String s : h )
                                 rh.add( s );
 
-                        result.setResponseBody( payload.substring( idx ) );
                         result.setResponseHeader( rh );
+
+                        idx = payload.length() >= idx + 4 ? idx + 4 : idx;
+
+                        result.setResponseBody( payload.substring( idx ) );
                     }
 
                 }
@@ -200,7 +219,7 @@ public class HttpService {
 
     public static void main(String[] args) {
 
-        final String filePath = "D:\\Code\\jnetpcap\\103.49.221.211.pcap";
+        final String filePath = "D:\\Code\\jnetpcap\\8.28.16.207.pcap";
 
         HttpService hs = new HttpService();
         PcapHttpSummary p = hs.extractPcap( filePath );

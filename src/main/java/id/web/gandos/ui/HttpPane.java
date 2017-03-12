@@ -269,7 +269,7 @@ public class HttpPane extends GridPane {
 			if( db.hasFiles() && isAccepted ) {
 				PcapHttpSummary sum = svc.extractPcap( db.getFiles().get(0).getAbsolutePath() );
 
-				System.out.println( sum );
+				//System.out.println( sum );
 
 				if( sum == null )
 					return;
@@ -284,15 +284,19 @@ public class HttpPane extends GridPane {
 
 				StringJoiner sj = new StringJoiner( System.lineSeparator() );
 
-				for( String s : sum.getRequestHeader() )
-					sj.add( s );
+				if( sum.getRequestHeader() != null )
+					for( String s : sum.getRequestHeader() )
+						sj.add( s );
 
 				taHeader.setText( sj.toString());
 
+				taPayload.setText( sum.getRequestBody() );
+
 				sj = new StringJoiner( System.lineSeparator() );
 
-				for( String s : sum.getRequestCookies() )
-					sj.add( s );
+				if( sum.getRequestCookies() != null )
+					for( String s : sum.getRequestCookies() )
+						sj.add( s );
 
 				taCookies.setText( sj.toString() );
 
@@ -300,8 +304,9 @@ public class HttpPane extends GridPane {
 
 				sj = new StringJoiner( System.lineSeparator() );
 
-				for( String s : sum.getResponseHeader() )
-					sj.add( s );
+				if( sum.getResponseHeader() != null )
+					for( String s : sum.getResponseHeader() )
+						sj.add( s );
 
 				taRsHeader.setText( sj.toString() );
 			}

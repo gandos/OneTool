@@ -12,6 +12,7 @@ import java.util.StringJoiner;
 public class PcapHttpSummary {
     private String host = "";
     private HttpClient.METHOD method;
+    private String requestBody;
     private String responseCode;
     private String responseBody;
 
@@ -65,6 +66,17 @@ public class PcapHttpSummary {
                 break;
         }
 
+    }
+
+    public String getRequestBody() {
+        return requestBody;
+    }
+
+    public void setRequestBody(String requestBody) {
+
+        if( requestBody != null )
+            requestBody = requestBody.replaceAll( " ", "" );
+        this.requestBody = requestBody;
     }
 
     public String getResponseCode() {
@@ -122,6 +134,7 @@ public class PcapHttpSummary {
         sb.add( method +" " +host );
         sb.add( "request header: " +requestHeader );
         sb.add( "request cookies: " +requestCookies );
+        sb.add( "request boy: " +requestBody);
         sb.add( "response code: " +responseCode );
         sb.add( "response header: " +responseHeader );
         sb.add( "response cookie: " +responseCookies );
