@@ -3,11 +3,10 @@ package id.web.gandos.util;
 
 import org.apache.http.Header;
 import org.apache.http.HttpHost;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpRequestRetryHandler;
 import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.*;
 import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.cookie.Cookie;
 import org.apache.http.entity.StringEntity;
@@ -19,6 +18,7 @@ import org.apache.http.protocol.HttpContext;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -139,7 +139,6 @@ public class HttpClient {
 		return sb.toString();
 	}
 	
-	
 	public static Map<String, Object> post( String url, Map<String,String> headers, String payload, List<Cookie> cookies ) throws Exception {
 		return post(url, headers, payload, cookies, null, null );
 	}
@@ -234,7 +233,154 @@ public class HttpClient {
 	    
 	    return responseData;
 	}
-	
+
+	public static Map<String, Object> sendRequest( String url, METHOD method, Map<String,String> headers, String payload,
+												   List<Cookie> cookies, String proxyIp, String proxyPort ) {
+
+		System.out.println( "Send Request to: " +url +", Method: " +method );
+
+		if( !url.toLowerCase().startsWith( "http" ) )
+			url = "http://" +url;
+
+		CloseableHttpClient httpclient = HttpClients.createDefault();
+		HttpClientContext context = HttpClientContext.create();
+		CloseableHttpResponse response = null;
+
+		Map<String, Object> responseData = new HashMap<>();
+
+		try {
+
+			// specify the get request
+			HttpRequestBase httpRequest = null;
+
+			switch( method ) {
+				case GET:
+					httpRequest = new HttpGet( url );
+					break;
+
+				case POST:
+					httpRequest = new HttpPost( url );
+					((HttpEntityEnclosingRequestBase) httpRequest).setEntity( new StringEntity( payload ) );
+					break;
+
+				case PUT:
+					httpRequest = new HttpPut( url );
+					((HttpEntityEnclosingRequestBase) httpRequest).setEntity( new StringEntity( payload ) );
+					break;
+
+				case DELETE:
+					httpRequest = new HttpDelete( url );
+					break;
+
+				case OPTION:
+					httpRequest = new HttpOptions( url );
+					break;
+
+				case HEAD:
+					httpRequest = new HttpHead( url );
+					break;
+			}
+
+			if( proxyIp != null && proxyPort != null && !"".equals( proxyIp ) && !"".equals( proxyPort )) {
+				HttpHost proxy = new HttpHost( proxyIp, Integer.valueOf( proxyPort ), "http" );
+				RequestConfig config = RequestConfig.custom()
+						.setProxy(proxy)
+						.build();
+
+				httpRequest.setConfig( config );
+			}
+
+
+			if( headers != null )
+				for( String k : headers.keySet() ) {
+					httpRequest.addHeader( k, headers.get( k ) );
+				}
+
+			if( cookies != null ) {
+				BasicCookieStore cookieStore = new BasicCookieStore();
+
+				for( Cookie c : cookies )
+					cookieStore.addCookie( c );
+
+				context.setCookieStore( cookieStore );
+			}
+
+			response = httpclient.execute( httpRequest, context );
+
+			responseData = extractResponse( response, context );
+
+		} catch (Exception e) {
+			e.printStackTrace();
+
+			String message = e.getMessage();
+			message = (message != null ? message : "") +e.getCause().getMessage();
+
+			responseData.put( "body", message );
+		} finally {
+			// When HttpClient instance is no longer needed,
+			// shut down the connection manager to ensure
+			// immediate deallocation of all system resources
+			try {
+				if(response != null)
+					response.close();
+
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+
+				responseData.put( "body", e.getMessage() );
+			}
+		}
+
+		return responseData;
+	}
+
+	private static Map<String, Object> extractResponse( HttpResponse response, HttpClientContext context ) {
+
+		Map<String, Object> responseData = new HashMap<>();
+
+		responseData.put( "code", response.getStatusLine().getStatusCode() );
+
+		if( response.getAllHeaders() != null ) {
+			Map<String, String> respHeader = new HashMap<>();
+
+			for( Header h : response.getAllHeaders() )
+				respHeader.put( h.getName(), h.getValue() );
+
+			responseData.put( "header", respHeader );
+		}
+
+		if( context.getCookieStore() != null && context.getCookieStore().getCookies() != null ) {
+			List<Cookie> respCookies = new ArrayList<>();
+
+			for( Cookie c : context.getCookieStore().getCookies() ) {
+				respCookies.add( c );
+			}
+
+			responseData.put( "cookies", respCookies );
+		}
+
+		if( response.getEntity() != null ) {
+			StringBuilder sb = new StringBuilder();
+
+			try(BufferedReader rd = new BufferedReader
+					(new InputStreamReader(response.getEntity().getContent()))) {
+
+				String line = "";
+				while ((line = rd.readLine()) != null) {
+					sb.append( line );
+				}
+			}
+			catch( Exception e ) {
+				sb.append( e.getMessage() );
+			}
+
+			responseData.put( "body", sb.toString() );
+		}
+
+		return responseData;
+	}
+
 	public static String getIp( String url, String proxyIp, String proxyPort ) throws Exception {
 		
 		System.out.println( "Resolving: " +url );
@@ -299,5 +445,5 @@ public class HttpClient {
 	}
 	
 	static String USER_AGENT = "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.59 Safari/537.36";
-
+	public static enum METHOD { GET, POST, PUT, DELETE, OPTION, HEAD }
 }

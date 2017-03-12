@@ -55,6 +55,5 @@ public class App extends Application
 
         primaryStage.setScene(scene);
         primaryStage.show();
-        System.out.println( h.getHeight() );
     }
 }
