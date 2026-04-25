@@ -18,7 +18,6 @@ Your only output is a set of markdown artifacts under `.security-review/01-recon
 3. **Sample bodies must reflect the EXACT shape of the source-code DTO**, not a summary. Open the request DTO class / interface / type. Walk every field. Recurse into nested types. Print every field with a realistic value. No `...`, no `// other fields`, no "etc.". If the DTO has 40 fields, the sample shows 40 fields. Same for the response DTO / view-model / serialized type.
 4. **If you cannot resolve a DTO statically** (e.g. `Object`, `JsonNode`, `dynamic`, `any`), do NOT abbreviate — write the body as `<runtime-typed: <TypeName> — schema not statically determinable>` and put a Note explaining why.
 5. **Self-check before writing the file.** After producing all detail blocks, scan your own draft once more. For each detail block, verify: (a) Sample request section present? (b) Sample response section present? (c) Body is fully expanded (no `...` / `// ...` / `etc.`)? If any check fails, fix the block before saving. End the file with a verification footer (see "Self-check footer" below).
-6. **Do NOT skip Step 0 (language instruction loading).** It is the first thing you do, and you only load instruction files for languages you actually detected.
 
 ## Inputs
 
@@ -223,31 +222,6 @@ A one-page summary with:
 - Pointers: "For deep-dive injection analysis, start from: `<endpoint-id-1>`, `<endpoint-id-2>`, ..." — explicitly nominating candidate endpoints per vulnerability class so the next step skips full-repo re-scanning.
 
 ## Workflow
-
-0. **Detect languages first, then load ONLY the matching instruction file(s) — never load all three blindly.**
-
-   Do not rely on `applyTo` auto-attach — in VS Code 1.106 / Copilot Chat 0.33.3, `applyTo` is a chat-level mechanism that does not reliably fire inside a subagent's isolated context when files are opened through tool calls. You must read the relevant instruction files yourself.
-
-   **Language detection algorithm — execute in this exact order:**
-
-   1. Run a single repo-root scan for top-level manifest markers:
-      - Java marker: any of `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts`, or any `*.java` / `*.kt` / `*.kts` / `*.groovy` / `*.jsp` file.
-      - .NET marker: any of `*.csproj`, `*.fsproj`, `*.vbproj`, `*.sln`, `Directory.Packages.props`, `global.json`, or any `*.cs` / `*.cshtml` / `*.razor` file.
-      - Node.js marker: `package.json` or any `*.js` / `*.mjs` / `*.cjs` / `*.ts` / `*.mts` / `*.cts` / `*.jsx` / `*.tsx` file (excluding paths in your ignore list).
-   2. Build a `detectedLanguages` set from whichever markers fired.
-   3. For each language **in `detectedLanguages` only**, read its instruction file:
-      - Java in set → read `.github/instructions/security-review-java.instructions.md`.
-      - .NET in set → read `.github/instructions/security-review-dotnet.instructions.md`.
-      - Node.js in set → read `.github/instructions/security-review-nodejs.instructions.md`.
-
-   **Hard prohibitions on this step:**
-   - **DO NOT read instruction files for languages not in `detectedLanguages`.** If only Java markers fired, do not open the .NET or Node.js instruction files. Reading all three "to be safe" wastes context and pulls in irrelevant detection rules that bias findings.
-   - **DO NOT skip detection** and assume a default. If you cannot find any of the markers above, return an error to the orchestrator: `"no Java/.NET/Node.js markers detected — repo may be out of scope for this pipeline"`.
-   - **DO NOT load instruction files speculatively before detection.** Detection runs first, instruction loading runs second.
-
-   At the end of this step, write a single line to your in-memory notes (and later echo into `00-meta/scope.md`): `Detected languages: [<comma-separated list>]. Loaded instruction files: [<comma-separated filenames>].` This makes the conditional loading auditable.
-
-   If an instruction file is missing for a detected language, note it in the short summary you return to the orchestrator (`"language X detected but security-review-X.instructions.md missing — using built-in defaults"`) and continue with the rules in this agent file.
 
 1. Detect top-level modules (`pom.xml`, `*.sln`/`*.csproj`, `package.json`, `nx.json`, `lerna.json`, `turbo.json`). For monorepos, treat each module separately.
 2. Fill `tech-stack.md`.
