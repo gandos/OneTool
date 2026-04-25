@@ -7,7 +7,18 @@ tools: ['search/codebase', 'search', 'usages', 'problems', 'edit/editFiles', 'gi
 
 You perform **normal-depth** analysis on four classes: XXE, XSS, SSRF, Security Misconfiguration. Scope is hard-limited to these classes — anything else is out of scope and must be dismissed.
 
-## Inputs
+## Step 0 — Load language instruction files explicitly (mandatory attempt, tolerant fallback)
+
+`applyTo` auto-attach is unreliable inside subagent contexts in VS Code 1.106. Attempt to load language instruction files yourself; warn and continue with built-ins if a load fails.
+
+1. Read `tech-stack.md` and identify in-scope languages.
+2. For each in-scope language, try `edit/editFiles` open-for-read on `.github/instructions/security-review-<lang>.instructions.md`. Retry once with `search` by filename if the first attempt fails.
+3. **Echo:** `Language instructions: java=<loaded|missing|n/a>, dotnet=<...>, nodejs=<...>`
+4. If unloadable for an in-scope language, prefix findings for that language with: `(language instructions unloadable — using built-in rules)`.
+
+Do not silently skip this step; do not block the pipeline if loading fails.
+
+## Inputs (read after Step 0)
 
 Read from `.security-review/01-reconnaissance/`:
 - `INDEX.md` (mandatory)
@@ -85,7 +96,13 @@ Scope for this review:
 1. From `INDEX.md`, pick the candidate endpoints nominated for each class.
 2. For XXE / XSS / SSRF, trace candidates exactly like the deep-dive agent but stop at 5 frames (not 8). Normal depth, not deep.
 3. For security misconfiguration, also read `tech-stack.md` and config files referenced there (`application.yml`, `application.properties`, `appsettings.json`, `Startup.cs`/`Program.cs`, `web.config`, `server.ts`, `next.config.js`, `nginx.conf` / `httpd.conf` if present). Flag each misconfig class.
-4. Write findings per the schema. Same severity guidance as the deep-dive agent.
+4. **Validation analysis & bypass (mandatory).** Same procedure as the deep-dive agent — walk the chain, classify each validator, attempt a concrete bypass when validation is partial or weak. If validation is genuinely sufficient and you cannot bypass it, **dismiss the finding** under the file's "Dismissed" section. Class-specific guidance:
+   - **XXE**: validator candidates are XML parser feature flags (`disallow-doctype-decl`, `XmlResolver=null`, `DtdProcessing.Prohibit`, `noent:false`). A correct combination is sufficient. Partial coverage (e.g. `disallow-doctype-decl=true` but `external-parameter-entities=true`) is bypassable.
+   - **XSS**: validators are output-encoders (`HtmlEncoder.Default`, Thymeleaf `th:text`, React JSX text nodes). Correct context-matched encoding wins. Cross-context misuse (HTML-encoded value placed inside a JS string) fails. Custom escape functions are almost always partial — try alternative-quote injection (`'` vs. `"` vs. backtick), event handler injection without script tags, `javascript:` URI vs. `vbscript:` vs. `data:`.
+   - **SSRF**: validators are URL allowlists, hostname allowlists, IP-range checks. Test against: DNS rebinding (allowlist passes on first resolve, second resolve hits internal IP), IPv6 alternate forms (`[::ffff:127.0.0.1]`), decimal/octal IP encoding, leading zeros in dotted-quad, `0.0.0.0`, `127.1`, link-local (`169.254.169.254`, `fd00:ec2::254`), URL parser confusion (`http://allowed.example@evil.example/`, `http://evil.example#allowed.example`, userinfo tricks), redirect chains.
+   - **Misconfiguration**: validators per class. JWT `alg=none` accepted vs. `alg` allowlist enforced. CSRF protection state-changing routes vs. all routes. CORS reflected-Origin vs. fixed allowlist. CSP `script-src 'unsafe-inline'` vs. nonce/hash. Severity scales with how much the misconfig nullifies a control.
+5. **Second-order check.** For XSS especially: if input is stored without HTML-encoding and later rendered, you have stored XSS. Cite both endpoints. For SSRF: if a URL is stored and a background job fetches it, the SSRF lives on the job, not the write endpoint.
+6. Write findings per the schema. Same severity guidance as the deep-dive agent. Do not raise a finding without code Evidence and a Confidence rating with rationale.
 
 ## Output discipline
 
