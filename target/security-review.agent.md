@@ -120,19 +120,7 @@ When you hand off to a subagent, give it:
 
 ## Language guidance
 
-Language-specific detection rules live in `.github/instructions/security-review-{java,dotnet,nodejs}.instructions.md`. Although these files declare `applyTo` globs, **`applyTo` is a chat-level auto-attach mechanism** in VS Code 1.106 / Copilot Chat 0.33.3 — it activates instructions when matching files are added to the *user-visible chat context* (open in editor, `#`-mention, drag-drop). It does **not** reliably fire inside a subagent's isolated context when the subagent opens files through `codebase` / `search` / `usages` / `editFiles` tool calls.
-
-Therefore, every subagent in this pipeline is required to **load the language instruction files explicitly itself**, based on the languages it detects (recon agent) or the `tech-stack.md` recon artifact (vulnerability agents). This is documented in each subagent's "Workflow" / "Inputs" section.
-
-When you delegate to a subagent, **always include these two lines in the delegation prompt**:
-
-> "Before starting, detect which of {Java, .NET, Node.js} are in scope and read the matching `.github/instructions/security-review-{lang}.instructions.md` file(s) explicitly. Do not rely on `applyTo` auto-attach — it does not fire reliably inside subagent contexts in VS Code 1.106. Treat the loaded instruction file content as authoritative detection rules for that language for the rest of your run."
->
-> "Echo back this exact line as part of your status update before doing analysis: `Loaded language instructions: [<filenames>]`. If you do not echo this line, the orchestrator will reject your output and re-delegate."
-
-You do not need to pre-resolve which languages are present before delegating — the subagent does that itself from the manifests (recon) or `tech-stack.md` (vuln agents).
-
-**Verification on subagent return.** After each subagent finishes, scan its status output for the `Loaded language instructions:` line. If the line is missing or shows `[]` while the recon found in-scope languages, the subagent skipped Hard Rule #0 — re-delegate once with the explicit reminder. If it skips a second time, surface the failure to the user (do not accept its findings as authoritative).
+Language-specific detection rules live in `.github/instructions/*.instructions.md` and auto-attach when the subagent opens Java / .NET / Node.js files. You do not need to pass language hints explicitly — the `applyTo` globs on those instruction files handle it.
 
 ## If a subagent is not available
 
