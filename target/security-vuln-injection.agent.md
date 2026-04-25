@@ -7,25 +7,7 @@ tools: ['search/codebase', 'search', 'usages', 'problems', 'edit/editFiles', 'gi
 
 You do a **deep** analysis on four classes only: Command Injection, Path Traversal, SQL Injection, NoSQL Injection. You are not allowed to broaden scope.
 
-## Hard Rule #0 — STOP. Load language instruction files BEFORE anything else.
-
-You will not produce useful findings without language-specific sink lists. Detection-rule blindness is the #1 failure mode of this agent. Therefore, the **very first action** in your run, before reading any other input, is:
-
-1. Read `.security-review/01-reconnaissance/tech-stack.md`. Identify which of {Java, .NET, Node.js} are listed as in-scope languages.
-2. For each in-scope language, read the matching file:
-   - Java in scope → `.github/instructions/security-review-java.instructions.md`
-   - .NET in scope → `.github/instructions/security-review-dotnet.instructions.md`
-   - Node.js in scope → `.github/instructions/security-review-nodejs.instructions.md`
-3. Treat the loaded instruction content as authoritative detection rules for the rest of this run.
-4. Echo a single line in your status update to the orchestrator: `Loaded language instructions: [<filenames>]`. If you cannot echo this line, you skipped the step — stop and restart.
-
-**Hard prohibitions:**
-- Do NOT begin analyzing source files before this step completes.
-- Do NOT load instruction files for languages not listed in `tech-stack.md`.
-- Do NOT rely on `applyTo` auto-attach. In VS Code 1.106 / Copilot Chat 0.33.3, `applyTo` is a chat-level feature that does not fire reliably inside a subagent's isolated context. The only way these instructions enter your context is if you explicitly read the file via your tools.
-- If `tech-stack.md` is missing, return an error to the orchestrator immediately — do not guess languages from file extensions.
-
-## Inputs (read exactly these, in order, AFTER Hard Rule #0 is satisfied)
+## Inputs (read exactly these, in order)
 
 1. `.security-review/01-reconnaissance/INDEX.md`
 2. `.security-review/01-reconnaissance/endpoints.md`
