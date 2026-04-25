@@ -171,24 +171,57 @@ If any cell above is "no", the file is INCOMPLETE. Do not write `INDEX.md` until
 If the self-check shows any "no", you MUST fix the offending block(s) and re-run the self-check before producing `INDEX.md`. Returning a recon artifact set with self-check failures is a contract violation.
 
 ### `data-flow.md`
-For every endpoint that is **non-trivial** (does more than return a static response), sketch a one-block data-flow diagram. The block **must** start with the endpoint ID, HTTP method, and route pattern so later steps can cross-reference without opening `endpoints.md`:
+
+For every endpoint that is **non-trivial** (does more than return a static response), sketch one or more data-flow blocks. The block **must** start with the endpoint ID, HTTP method, and route pattern so later steps can cross-reference without opening `endpoints.md`:
 
 ```
 ENDPOINT: <ID from endpoints.md>
 METHOD:   <GET | POST | PUT | PATCH | DELETE | WS | RPC | MQ | CRON | ...>
 PATH:     <route pattern, topic name, queue name, function name>
 HANDLER:  <file:line>
+CLASSES INVOLVED:
+  - <FQCN or module path 1>  (file:line)  [role: handler|service|repository|client|util|...]
+  - <FQCN or module path 2>  (file:line)  [role: ...]
+  - ... every class/module that touches the data on this path ...
   SOURCE: <input param> (<query|body.<ptr>|path|header|cookie|message-payload|...>)
-    → <sanitizer or validator, if any> (<file:line>)
-    → <call site 1 file:line>
-    → <call site 2 file:line>
-  SINK: <dangerous API or external call> (<class: SQL | OS command | filesystem | HTTP outbound | template render | XML parser | crypto | deserialization | ...>)
+    → <validator or sanitizer, if any>  (<file:line>)  [type: allowlist|regex|blocklist|type-check|length|encode|other; verdict: sufficient|partial|none]
+    → <call site 1 file:line>  (class FooService.bar)
+    → <call site 2 file:line>  (class BarRepository.save)
+  SINK: <dangerous API or external call>
+        (<class: SQL-write | SQL-read | NoSQL | ORM-raw | OS-exec | FS-write | FS-read | FS-archive-extract |
+                  HTTP-outbound | SOAP-outbound | gRPC-outbound | MQ-produce | MQ-consume |
+                  template-render | XML-parse | XPath | LDAP | JNDI | mail-send | SMS-send |
+                  crypto-sign | crypto-encrypt | hash | RNG | deserialize | reflect | eval |
+                  cookie-write | session-write | header-write | cache-write | log-write |
+                  redirect | view-render | cors-config | cmd-exec | other>)
 ```
 
-Rules:
+#### Mandatory sink-category sweep (the #1 cause of incomplete data-flow output)
+
+Most data-flow output today only shows database sinks. That's a coverage failure. Before declaring any endpoint's data-flow blocks complete, you must sweep the handler chain for **every** sink category below and either include matching sinks as their own blocks or note explicitly that none exist. The categories:
+
+1. **Persistence**: SQL/NoSQL writes & reads, ORM raw queries, file-backed databases (SQLite, H2 file mode).
+2. **Local filesystem**: any read or write under `java.nio.file.*`, `java.io.File*`, `System.IO.File*` / `Directory*` / `FileStream`, Node.js `fs.*`, multipart upload destinations, log file writes that include user input, archive extraction (`ZipInputStream`, `TarArchiveInputStream`, `System.IO.Compression.ZipArchive`, `tar`/`adm-zip`/`unzipper`), temp file creation, `Path.Combine` / `path.join` with user input.
+3. **External-system calls**: outbound HTTP (`RestTemplate`, `WebClient`, `OkHttp`, `Apache HttpClient`, `HttpClient`, `IHttpClientFactory`, `axios`, `node-fetch`, `got`, `undici`), SOAP clients (JAX-WS, CXF, WCF, `soap` npm), gRPC clients, third-party SDK calls (AWS/Azure/GCP/Stripe/Twilio/...), LDAP queries, JNDI lookups.
+4. **Messaging**: MQ producers (Kafka producer, RabbitMQ basicPublish, ActiveMQ, AWS SQS/SNS, Azure Service Bus, GCP Pub/Sub, NATS), MQ consumers if they re-emit downstream.
+5. **Process / OS**: any process spawn (`Runtime.exec`, `ProcessBuilder`, `Process.Start`, PowerShell, `child_process.*`, `shelljs.*`, `cross-spawn`, `execa`).
+6. **Templating / view rendering**: server-side template engines that interpolate user data (Thymeleaf, JSP, Razor, FreeMarker, Velocity, EJS, Handlebars, Pug, Mustache, Liquid, JSX/TSX server render).
+7. **XML / XPath / XSL**: any XML parse with user-controlled XML or XPath, XSLT transforms.
+8. **Communication side channels**: mail (SMTP, SES, SendGrid, Mailgun), SMS (Twilio, SNS), push notifications.
+9. **Crypto / RNG / serialization**: crypto operations on user data, `ObjectInputStream.readObject`, `BinaryFormatter`, `node-serialize`, YAML `load`, JSON deserialization with polymorphic types.
+10. **Web sinks**: `Set-Cookie` writes from user input, session writes, response headers from user input, redirect URLs from user input, dynamic CORS origin allowance.
+11. **Cache writes**: Redis/Memcached/Hazelcast keys/values built from user input.
+12. **Reflection / dynamic dispatch / eval**: `Class.forName(userString)`, `MethodInfo.Invoke`, `eval`, `Function(...)`, `vm.runInNewContext`.
+
+#### Rules
+
 - Every block **must** include `METHOD:` and `PATH:` lines. For non-HTTP endpoints, use the closest equivalent (e.g. `METHOD: MQ` + `PATH: orders.created`).
-- Trace across at most 5 frames. If the chain branches, repeat the block per branch under the same endpoint ID with a branch label (e.g. `ENDPOINT: EP-012 (branch: admin path)`).
+- The `CLASSES INVOLVED` list is **required** and must contain every class/module touched on the chain — handler, service layer, repository, client, util/helper, mapper, validator. Not just the endpoint controller and the final repository.
+- An endpoint may have **multiple data-flow blocks**, one per sink it reaches. If the same handler writes to a DB and emits an HTTP outbound, produce two blocks. If the same input flows to two sinks, produce two blocks.
+- If you complete the sweep and a category has no sinks for this endpoint, do not write a block — but in `INDEX.md`'s per-endpoint summary, list the sink categories you confirmed-empty. (Pattern: `EP-012 sinks: SQL-write, FS-read; confirmed-empty: OS-exec, HTTP-outbound, deserialize.`)
+- Trace across at most 5 frames. If the chain branches, repeat the block per branch with a branch label (e.g. `ENDPOINT: EP-012 (branch: admin path)`).
 - If multiple SOURCE parameters feed the same SINK, list each as its own `SOURCE:` line before the shared `SINK:`.
+- For each validator/sanitizer in the chain, classify it: `allowlist`, `regex`, `blocklist`, `type-check`, `length`, `encode`, `other`. Add a verdict: `sufficient`, `partial`, or `none`. The vulnerability-detection step uses this annotation to decide whether to attempt a bypass.
 - Prefer precision over recall — this file is the master input for the vulnerability-detection step.
 
 ### `datastores.md`
@@ -222,6 +255,18 @@ A one-page summary with:
 - Pointers: "For deep-dive injection analysis, start from: `<endpoint-id-1>`, `<endpoint-id-2>`, ..." — explicitly nominating candidate endpoints per vulnerability class so the next step skips full-repo re-scanning.
 
 ## Workflow
+
+0. **Load language instruction files explicitly (mandatory attempt, tolerant fallback).** `applyTo` auto-attach is unreliable inside subagent contexts in VS Code 1.106. Detect languages from manifest markers, then attempt to load instruction files yourself.
+
+   - Java markers: `pom.xml`, `build.gradle[.kts]`, `settings.gradle[.kts]`, any `*.java` / `*.kt` / `*.kts` / `*.groovy` / `*.jsp`.
+   - .NET markers: `*.csproj`, `*.fsproj`, `*.vbproj`, `*.sln`, `Directory.Packages.props`, `global.json`, any `*.cs` / `*.cshtml` / `*.razor`.
+   - Node.js markers: `package.json`, any `*.js` / `*.mjs` / `*.cjs` / `*.ts` / `*.mts` / `*.cts` / `*.jsx` / `*.tsx`.
+
+   For each detected language **only**, attempt to load `.github/instructions/security-review-<lang>.instructions.md` via `edit/editFiles` open-for-read; retry once with `search` by filename. Do not load files for languages whose markers did not fire.
+
+   **Echo:** `Detected languages: [<list>]. Language instructions: java=<loaded|missing|n/a>, dotnet=<...>, nodejs=<...>` and persist this line into `00-meta/scope.md`.
+
+   If unloadable for a detected language, continue with the built-in detection rules in this agent file and add a one-liner to `00-meta/scope.md`: `WARN: language instructions for <lang> unloadable — using built-in rules`.
 
 1. Detect top-level modules (`pom.xml`, `*.sln`/`*.csproj`, `package.json`, `nx.json`, `lerna.json`, `turbo.json`). For monorepos, treat each module separately.
 2. Fill `tech-stack.md`.
