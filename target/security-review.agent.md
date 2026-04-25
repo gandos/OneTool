@@ -56,28 +56,52 @@ Every finding file uses this schema (one block per finding). **All fields are ma
 - **Severity:** Critical | High | Medium | Low | Info
 - **Class:** <OWASP category> / <CWE-###>
 - **Confidence:** High | Medium | Low
+- **Confidence rationale:** <one or two sentences on why this confidence level — what makes the data-flow proof clean or shaky, what was assumed, what couldn't be verified>
 - **Endpoint:** <endpoint ID from recon> — <METHOD> <route> (or "n/a — non-endpoint finding")
 - **Location:** `<path>:<line-start>-<line-end>`
 - **Source → Sink:** <tainted input> → <dangerous API>
+- **Classes involved:** <copy from data-flow.md CLASSES INVOLVED, plus any class you opened during deep trace>
 - **Evidence:**
   ```<lang>
-  <code excerpt>
+  <code excerpt that proves the vulnerability — must show the source, the sink, and (if any) the validator. Multiple snippets allowed when the chain crosses files.>
   ```
-- **Reasoning:** <2–5 sentences explaining WHY this is vulnerable. Name the missing control (no sanitizer / wrong sanitizer / unsafe sink / broken access check / insecure default). Explain how the tainted value reaches the sink unchanged or insufficiently transformed. Reference the exact hops from `data-flow.md` where relevant. Do not restate the Evidence code — explain it.>
+- **Root Cause:** <short label naming the underlying defect class. Examples: "missing input validation at trust boundary", "regex anchored only at start (^pattern) so trailing payload accepted", "blocklist incomplete — does not cover URL-encoded variants", "type confusion between String and Integer at parameter binding", "trust boundary violation — second-order persisted XSS read from DB", "insecure default — XML parser allows external entities", "improper output encoding for HTML context", "broken access check — role evaluated before resource ownership">
+- **Validation & Bypass:**
+  - **Validator(s) found:** <list each: file:line, type (allowlist|regex|blocklist|type-check|length|encode|other), what it gates, verdict (sufficient|partial|none)>
+  - **Bypass attempted:** <yes / no / n/a>
+  - **Bypass description:** <if yes: the concrete bypass technique attempted, why it works against the validator's logic. If no validator was found, write "no validation in chain — direct flow to sink".>
+  - **Bypass payload:** <a specific input string/structure that defeats the validator and reaches the sink, OR "n/a — no validator">
+- **Reasoning:** <2–5 sentences explaining WHY this is vulnerable, integrating the validation analysis. Name the missing or insufficient control. Explain how the tainted value reaches the sink despite (or in absence of) validation. Reference exact hops from `data-flow.md`. Do not restate the Evidence code — explain it.>
 - **Exploit Payload:**
   ```<http|json|bash|sql|xml|...>
-  <concrete payload a tester could send to trigger the vulnerability, built to match the endpoint's request shape from endpoints.md>
+  <concrete payload a tester could send to trigger the vulnerability, built to match the endpoint's request shape from endpoints.md. If a validator exists in the chain, this payload must be the bypass payload from above.>
   ```
-  <one-line expected observable result — e.g. "returns /etc/passwd contents", "returns all users (auth bypass)", "DNS callback to attacker-controlled host">
-- **Exploitability:** <short note on pre-conditions / auth / reachability>
-- **Fix:** <concrete remediation with a before/after code example>
+  <one-line expected observable result>
+- **Second-Order Pattern:** <yes / no>
+  - If yes: <describe the storage→retrieval flow. Identify (a) the **write endpoint** that accepts user data and persists it without sanitization, (b) the **read endpoint or background job** that retrieves the data and feeds it into a sink, (c) the **persistence medium**, and (d) the **specific field/key** used. Cite both endpoints by ID from `endpoints.md`.>
+  - **Persistence media to consider** (any of these qualify as second-order storage):
+    - **Database** — column, document, key/value pair.
+    - **Filesystem** — file content, filename, directory name.
+    - **Cache** — Redis/Memcached key or value, in-memory caches (`Caffeine`, `IMemoryCache`, `node-cache`).
+    - **Server-side session** — `HttpSession` attributes (Java), `HttpContext.Session` (ASP.NET Core), `express-session` / `cookie-session` server-side store, Spring Session, distributed session backends. Set by one endpoint, read by another.
+    - **Cookies** — server-set cookie values that are later trusted by other endpoints.
+    - **Message queues** — Kafka topic, RabbitMQ queue, SQS message attribute, Service Bus property.
+    - **Headers / context** — request-scoped or thread-local context that downstream filters or interceptors trust.
+    - **Config / feature-flag store** — values written via an admin UI then read by other endpoints.
+- **Exploitability:** <short note on pre-conditions / auth / reachability — including whether second-order requires two requests and any timing>
+- **Fix:** <concrete remediation with a before/after code example. If validation was the missing control, the "after" snippet must show the right validator (e.g. canonicalize-then-prefix-check for path traversal, parameterized query for SQLi, allowlist of operator keys for NoSQLi).>
 - **References:** <links, CVEs, framework docs>
 ```
 
 Schema notes for all subagents:
-- **Reasoning** must explain the *defect* and the *missing control*, not just narrate the code. Example good reasoning: "The `filename` query param is concatenated into `Files.newInputStream` with no canonicalization or prefix check. `ValidationUtils.isAlphanumeric` is applied earlier but only to a different field (`userId`), so the traversal-sensitive value is unguarded at the sink."
-- **Exploit Payload** must match the endpoint's actual request contract (method, content-type, parameter names/locations) as recorded in `endpoints.md`. For non-HTTP findings (MQ consumers, CLI, deserialization), provide the equivalent payload (message body, CLI invocation, serialized blob).
-- Never fabricate payloads against external/live systems — payloads are illustrative patterns using placeholder hosts like `attacker.example`.
+
+- **Evidence is non-negotiable.** Every finding must show actual code excerpts proving the source-to-sink chain. A finding without code evidence is invalid and must be dropped.
+- **Confidence is calibrated against the proof, not the severity.** High = full chain shown, every hop verified, no skipped branches; Medium = one branch skipped or one frame heuristic; Low = pattern-match without trace. Pair Confidence with **Confidence rationale** so a reviewer can see why.
+- **Validation-aware analysis is mandatory before raising a finding.** Walk the data-flow chain. Identify every validator/sanitizer. If a validator exists and is genuinely sufficient, **do NOT raise the finding** — instead record it under the file's "Dismissed" section with a justification. Only raise a finding when (a) no validator exists, OR (b) a validator exists but a concrete bypass works.
+- **Bypass attempts must be concrete, not theoretical.** "The validator might be bypassable" is not acceptable. Either show the input that defeats it (with the reasoning rooted in the validator's actual code) or do not raise the finding.
+- **Root Cause** is a one-line label naming the defect class. **Reasoning** is the longer explanation. Both are required and they should not duplicate each other.
+- **Second-order injection** is mandatory to check on every input that flows to persistence. Pattern: user input → stored without sanitization → later retrieved → flows into a sink without sanitization. Trace the read side too. Most teams miss this; finding it is high-value.
+- **Exploit Payload** must match the endpoint's actual request contract (method, content-type, parameter names/locations) as recorded in `endpoints.md`. For non-HTTP findings (MQ consumers, CLI, deserialization), provide the equivalent payload. Never fabricate payloads against external/live systems — use `attacker.example`.
 
 ## Pipeline
 
@@ -120,7 +144,15 @@ When you hand off to a subagent, give it:
 
 ## Language guidance
 
-Language-specific detection rules live in `.github/instructions/*.instructions.md` and auto-attach when the subagent opens Java / .NET / Node.js files. You do not need to pass language hints explicitly — the `applyTo` globs on those instruction files handle it.
+Language-specific detection rules live in `.github/instructions/security-review-{java,dotnet,nodejs}.instructions.md`. Although these files declare `applyTo` globs, in VS Code 1.106 / Copilot Chat 0.33.3 the auto-attach is observed to be unreliable inside subagent contexts. To compensate, every subagent has a Step 0 that explicitly attempts to load the relevant instruction files and echoes a status line:
+
+```
+Language instructions: java=<loaded|missing|n/a>, dotnet=<...>, nodejs=<...>
+```
+
+**On each subagent return, scan its status output for that line.** If the line shows `missing` for a language that `tech-stack.md` lists as in-scope, the load failed — re-delegate once with the explicit reminder. If the line is absent entirely, the subagent skipped Step 0 — also re-delegate.
+
+The instruction-load step is **best-effort, not gating**. If a file is genuinely unloadable, the subagent falls back to the built-in detection rules in its own agent file and prefixes affected findings with a warning. Do not abort the pipeline for an `instructions: missing` status — only abort if a required artifact (recon files, vuln files) is missing.
 
 ## If a subagent is not available
 
