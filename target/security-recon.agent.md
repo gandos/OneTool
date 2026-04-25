@@ -110,10 +110,14 @@ Content-Type: <type>
 ```
 
 Rules for the detail block:
-- Sample request and sample response must be **concrete** — use realistic example values that match the parameter types, not `<string>` placeholders. Numeric fields get numbers, UUID fields get UUID-shaped strings, enums use a real enum value from the code.
-- For non-HTTP endpoints, adapt the block: MQ consumers use a sample message payload block instead of HTTP request/response; scheduled jobs list trigger cron and input sources (config/DB row); gRPC uses `service.Method` + protobuf JSON body; SOAP uses SOAP envelope.
-- If the endpoint returns different status codes under different conditions (e.g. 200/400/404), show the primary success sample in the main block and list alternate responses in a brief sub-list: `- 400 when <validation fails>: {"error": "..."}`.
-- Infer the response shape from the return type / `ResponseEntity<T>` / `ActionResult<T>` / `Promise<T>` and the serializer defaults (Jackson config, `System.Text.Json` options, `JSON.stringify`). Flag fields that are conditionally omitted or serialized under a different name.
+- **COMPLETE bodies, not truncated.** Sample request and sample response bodies must include **every field** declared by the request DTO / response DTO / view-model / TypeScript interface / `@Schema` annotation / OpenAPI definition. No `...`, no `// other fields`, no "etc." Walk the type recursively: for nested objects, expand the nested object inline; for arrays, show at least one fully-populated element; for polymorphic types (Jackson `@JsonSubTypes`, `JsonDerivedType`, discriminated unions), show one branch and list the other branches under "Alternate body shapes" below the primary block.
+- **No truncation by length.** If a DTO has 40 fields, the sample body shows all 40. If you genuinely cannot resolve the type (third-party `Object`/`JsonNode`/`any`/`dynamic`), state that explicitly in Notes: "Body type is `JsonNode` — runtime-typed, schema not statically determinable" — never silently abbreviate.
+- **Concrete values, not placeholders.** Use realistic example values that match the parameter types: numeric fields get numbers, UUID fields get UUID-shaped strings, enums use a real enum value from the code, dates use ISO-8601, booleans use `true`/`false` matching the field's likely default.
+- **Every endpoint gets a detail block.** The detail-block count under this section MUST equal the row count in the summary table above. After producing all blocks, end the file with a verification line: `> Coverage check: <N> rows in summary table, <N> detail blocks below — match.` If counts diverge, fix the file before returning.
+- For non-HTTP endpoints, adapt the block: MQ consumers use a full sample message payload (every field of the message DTO); scheduled jobs list trigger cron + the input sources they read (config keys, DB rows — fully expanded); gRPC uses `service.Method` + protobuf JSON body with every proto field; SOAP uses a complete SOAP envelope including all `<xs:element>`s declared in the WSDL.
+- **Multiple status codes**: show the primary success sample in the main block, then list **every** alternate response with its full body, not a one-liner: `400 (validation failure)` followed by the complete error envelope, `404 (not found)` with its body, etc.
+- Infer the response shape from the return type / `ResponseEntity<T>` / `ActionResult<T>` / `Promise<T>` / Express `res.json(...)` argument and the serializer defaults (Jackson config including `@JsonInclude`, `@JsonProperty`, `@JsonIgnore`; `System.Text.Json` options including `JsonPropertyName`, `JsonIgnore`; `class-transformer` `@Expose`/`@Exclude`; `JSON.stringify` replacer functions). Apply field renames, omissions on null, and serializer-level transforms before printing the sample. Flag fields that are conditionally omitted or serialized under a different name in Notes.
+- If the response includes envelope/wrapper types (Spring HATEOAS `EntityModel`, JSON:API, custom `ApiResponse<T>` envelopes), include the envelope structure with the inner `T` fully expanded.
 
 ### `data-flow.md`
 For every endpoint that is **non-trivial** (does more than return a static response), sketch a one-block data-flow diagram. The block **must** start with the endpoint ID, HTTP method, and route pattern so later steps can cross-reference without opening `endpoints.md`:
@@ -168,13 +172,31 @@ A one-page summary with:
 
 ## Workflow
 
+0. **Load language-specific instruction files explicitly.** Do not rely on `applyTo` auto-attach — in VS Code 1.106 / Copilot Chat 0.33.3, `applyTo` is a chat-level mechanism that does not reliably fire inside a subagent's isolated context when files are opened through tool calls. **You must read the relevant instruction files yourself before doing any analysis.**
+
+   At the start of the run, detect which languages are present (one quick scan):
+   - **Java** present if the repo contains any of: `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle`, `*.java`, `*.kt`, `*.kts`, `*.groovy`, `*.jsp`.
+   - **.NET** present if the repo contains any of: `*.csproj`, `*.fsproj`, `*.vbproj`, `*.sln`, `Directory.Packages.props`, `global.json`, `*.cs`, `*.cshtml`, `*.razor`.
+   - **Node.js** present if the repo contains any of: `package.json`, `*.js`, `*.mjs`, `*.cjs`, `*.ts`, `*.mts`, `*.cts`, `*.jsx`, `*.tsx`.
+
+   For each detected language, read the corresponding instruction file and treat its content as authoritative detection rules for that language for the rest of this run:
+   - Java present → read `.github/instructions/security-review-java.instructions.md`.
+   - .NET present → read `.github/instructions/security-review-dotnet.instructions.md`.
+   - Node.js present → read `.github/instructions/security-review-nodejs.instructions.md`.
+
+   If an instruction file is missing, note it in the short summary you return to the orchestrator (`"language X detected but security-review-X.instructions.md missing — using built-in defaults"`) and continue.
+
 1. Detect top-level modules (`pom.xml`, `*.sln`/`*.csproj`, `package.json`, `nx.json`, `lerna.json`, `turbo.json`). For monorepos, treat each module separately.
 2. Fill `tech-stack.md`.
-3. Enumerate endpoints → fill `endpoints.md`. Use `search` / `usages` against the framework annotations listed above rather than reading every file.
+3. Enumerate endpoints → fill `endpoints.md`. Use `search` / `usages` against the framework annotations listed above rather than reading every file. **Coverage is mandatory:**
+   - Run a separate `search` for **every** annotation/method-pattern listed under "Detection cues" for the languages present. Do not stop after the first framework hits.
+   - For each match, open the handler file and resolve the request DTO type and response DTO type before writing the detail block. If the handler signature is `(@RequestBody FooDto)`, open `FooDto` and walk every field; do the same for the response type. Recurse into nested DTOs.
+   - Do not skip endpoints because they "look trivial". A static `GET /health` still gets a row + a detail block (with a minimal response body).
+   - After enumerating, count the rows in the summary table and the detail blocks. They must match. Add the coverage-check verification line at the end of `endpoints.md`.
 4. For each non-trivial endpoint, trace the top-level flow → fill `data-flow.md`. Stop at 5 frames. Be honest about branches you truncated.
 5. Fill `datastores.md`.
 6. Fill `external-services.md`.
-7. Produce `INDEX.md` last, with deliberate nominations of candidate hot-spots per vulnerability class.
+7. Produce `INDEX.md` last, with deliberate nominations of candidate hot-spots per vulnerability class. `INDEX.md` must include a line: `Endpoint coverage: <N> total endpoints across <M> modules. All have detail blocks in endpoints.md.` If coverage is incomplete, do not write `INDEX.md` — go back to step 3.
 
 ## Output discipline
 
