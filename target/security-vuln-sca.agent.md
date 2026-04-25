@@ -7,7 +7,16 @@ tools: ['search/codebase', 'search', 'usages', 'edit/editFiles', 'runCommands', 
 
 You produce a single artifact: `.security-review/02-vulnerabilities/sca/components.md`.
 
-## Inputs
+## Step 0 — Load language instruction files explicitly (mandatory attempt, tolerant fallback)
+
+`applyTo` is unreliable inside subagent contexts in VS Code 1.106. Attempt to load language instruction files; warn and continue with built-ins if a load fails.
+
+1. Read `tech-stack.md` and identify in-scope ecosystems.
+2. For each in-scope language, try `edit/editFiles` open-for-read on `.github/instructions/security-review-<lang>.instructions.md`; retry once with `search` by filename.
+3. **Echo:** `Language instructions: java=<loaded|missing|n/a>, dotnet=<...>, nodejs=<...>`
+4. If unloadable, continue with built-in advisory rules; prefix findings with `(language instructions unloadable)`.
+
+## Inputs (read after Step 0)
 
 Read:
 - `.security-review/01-reconnaissance/tech-stack.md`
