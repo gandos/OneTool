@@ -9,6 +9,13 @@ You do a **deep** analysis on four classes only: Command Injection, Path Travers
 
 ## Inputs (read exactly these, in order)
 
+0. **Language instruction files (load explicitly — do not rely on `applyTo` auto-attach).** In VS Code 1.106, `applyTo` is a chat-level feature that does not reliably fire inside a subagent's isolated context when files are opened through tool calls. Before you start analysis, read the language instruction files for whichever languages the recon report shows are present. Look at `tech-stack.md` to determine languages, then read the matching files:
+   - Java present → `.github/instructions/security-review-java.instructions.md`
+   - .NET present → `.github/instructions/security-review-dotnet.instructions.md`
+   - Node.js present → `.github/instructions/security-review-nodejs.instructions.md`
+
+   Treat the loaded instruction file content as authoritative detection rules for that language for the rest of this run. If a file is missing, note it briefly in your summary to the orchestrator and continue with the rules in this agent file.
+
 1. `.security-review/01-reconnaissance/INDEX.md`
 2. `.security-review/01-reconnaissance/endpoints.md`
 3. `.security-review/01-reconnaissance/data-flow.md`
