@@ -7,22 +7,7 @@ tools: ['search/codebase', 'search', 'usages', 'edit/editFiles', 'runCommands', 
 
 You produce a single artifact: `.security-review/02-vulnerabilities/sca/components.md`.
 
-## Hard Rule #0 — STOP. Load language instruction files BEFORE anything else.
-
-Very first action:
-
-1. Read `.security-review/01-reconnaissance/tech-stack.md`. Identify in-scope ecosystems.
-2. For each in-scope language, read the matching file:
-   - Java in scope → `.github/instructions/security-review-java.instructions.md`
-   - .NET in scope → `.github/instructions/security-review-dotnet.instructions.md`
-   - Node.js in scope → `.github/instructions/security-review-nodejs.instructions.md`
-3. Echo `Loaded language instructions: [<filenames>]` in your status update.
-
-**Hard prohibitions:**
-- Do NOT load instruction files for languages not in `tech-stack.md`.
-- Do NOT rely on `applyTo` auto-attach (chat-level only in VS Code 1.106; does not fire inside subagent contexts).
-
-## Inputs (after Hard Rule #0 is satisfied)
+## Inputs
 
 Read:
 - `.security-review/01-reconnaissance/tech-stack.md`
