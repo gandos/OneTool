@@ -9,7 +9,14 @@ You perform **normal-depth** analysis on four classes: XXE, XSS, SSRF, Security 
 
 ## Inputs
 
-Read from `.security-review/01-reconnaissance/`:
+**First, load language-specific instruction files explicitly (do not rely on `applyTo` auto-attach).** In VS Code 1.106, `applyTo` is a chat-level feature that does not reliably fire inside a subagent's isolated context when files are opened through tool calls. Read `.security-review/01-reconnaissance/tech-stack.md` first to learn which languages are present, then read the matching instruction files:
+- Java present → `.github/instructions/security-review-java.instructions.md`
+- .NET present → `.github/instructions/security-review-dotnet.instructions.md`
+- Node.js present → `.github/instructions/security-review-nodejs.instructions.md`
+
+Treat the loaded instruction file content as authoritative detection rules for that language. If a file is missing, note it in your summary to the orchestrator and continue.
+
+Then read from `.security-review/01-reconnaissance/`:
 - `INDEX.md` (mandatory)
 - `endpoints.md`
 - `data-flow.md`
