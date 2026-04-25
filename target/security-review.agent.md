@@ -1,6 +1,6 @@
 ---
 description: Orchestrates a two-step application security review (Reconnaissance then Vulnerability Detection) for Java, .NET, and Node.js codebases. Use this agent when the user asks for a "security review", "security audit", "appsec review", "SAST-style review", or asks to "find vulnerabilities" in the repo.
-tools: ['codebase', 'search', 'usages', 'problems', 'findTestFiles', 'changes', 'editFiles', 'runCommands', 'runTasks', 'think', 'fetch', 'githubRepo']
+tools: ['search/codebase', 'search', 'usages', 'problems', 'findTestFiles', 'changes', 'edit/editFiles', 'runCommands', 'runTasks', 'fetch', 'githubRepo']
 ---
 
 # Security Review Orchestrator
@@ -124,11 +124,15 @@ Language-specific detection rules live in `.github/instructions/security-review-
 
 Therefore, every subagent in this pipeline is required to **load the language instruction files explicitly itself**, based on the languages it detects (recon agent) or the `tech-stack.md` recon artifact (vulnerability agents). This is documented in each subagent's "Workflow" / "Inputs" section.
 
-When you delegate to a subagent, **always include this line in the delegation prompt**:
+When you delegate to a subagent, **always include these two lines in the delegation prompt**:
 
 > "Before starting, detect which of {Java, .NET, Node.js} are in scope and read the matching `.github/instructions/security-review-{lang}.instructions.md` file(s) explicitly. Do not rely on `applyTo` auto-attach — it does not fire reliably inside subagent contexts in VS Code 1.106. Treat the loaded instruction file content as authoritative detection rules for that language for the rest of your run."
+>
+> "Echo back this exact line as part of your status update before doing analysis: `Loaded language instructions: [<filenames>]`. If you do not echo this line, the orchestrator will reject your output and re-delegate."
 
 You do not need to pre-resolve which languages are present before delegating — the subagent does that itself from the manifests (recon) or `tech-stack.md` (vuln agents).
+
+**Verification on subagent return.** After each subagent finishes, scan its status output for the `Loaded language instructions:` line. If the line is missing or shows `[]` while the recon found in-scope languages, the subagent skipped Hard Rule #0 — re-delegate once with the explicit reminder. If it skips a second time, surface the failure to the user (do not accept its findings as authoritative).
 
 ## If a subagent is not available
 
