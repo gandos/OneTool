@@ -44,6 +44,11 @@ All outputs live under `.security-review/` at the repo root. Create this directo
 │   │   ├── xss.md
 │   │   ├── ssrf.md
 │   │   └── security-misconfiguration.md
+│   ├── bizlogic/
+│   │   ├── auth-bypass.md
+│   │   ├── mfa-bypass.md
+│   │   ├── transaction-logic.md
+│   │   └── business-logic.md
 │   └── sca/
 │       └── components.md
 └── final-report.md
@@ -112,18 +117,22 @@ Schema notes for all subagents:
 
 ### Step 1 — Reconnaissance
 - Delegate to the **security-recon** subagent.
-- Tell it: "Perform reconnaissance on the codebase and write outputs to `.security-review/01-reconnaissance/*.md` following the schema in your instructions. End by producing `INDEX.md`."
-- After it returns, **verify** that all six files exist and are non-empty. If any are missing, re-delegate once with the specific files to produce; if it still fails, stop and surface the problem to the user.
+- Tell it: "Perform reconnaissance on the codebase and write outputs to `.security-review/01-reconnaissance/*.md`. Save artifacts incrementally as they're drafted — do not batch all writes to the end. Prefer partial-but-honest outputs (with `## Coverage gaps` notes) over no output. End by producing `INDEX.md` unconditionally — INDEX.md summarizes whatever exists on disk at that point."
+- After it returns, **verify what's on disk**. The verification is tiered:
+  - **Minimum viable set (REQUIRED to proceed)**: `01-reconnaissance/INDEX.md` exists AND is non-empty AND at least one of {`tech-stack.md`, `endpoints.md`} exists and is non-empty. If this minimum is not met, re-delegate once asking specifically for "INDEX.md plus tech-stack.md plus endpoints.md, partial coverage acceptable, must include `## Coverage gaps` section". If it still fails, stop and surface the problem to the user with the agent's status output.
+  - **Full set (preferred)**: all six files (`tech-stack.md`, `endpoints.md`, `data-flow.md`, `datastores.md`, `external-services.md`, `INDEX.md`) exist and are non-empty. If files are missing but the minimum viable set is satisfied, log the gap to the run-log and proceed to Step 2 — the vuln subagents are designed to operate on partial recon. Do **not** abort the pipeline because `data-flow.md` or `external-services.md` is empty.
+  - If `INDEX.md` itself contains a `## Coverage gaps` section listing pending items, that is expected — pass it through as-is. Do not require the recon agent to fill those gaps before proceeding.
 - Try to append run-log entry. If the append fails, hold it in memory and proceed — do not block the pipeline.
 
-### Step 2 — Vulnerability Detection (three parallel-safe specialist subagents)
+### Step 2 — Vulnerability Detection (four parallel-safe specialist subagents)
 Run these in sequence (not parallel — the user's VS Code 1.106 runs subagents one at a time from an orchestrator). Each subagent reads only `01-reconnaissance/INDEX.md` plus the specific recon files it needs, **not** the whole codebase.
 
 1. Delegate to **security-vuln-injection** — deep-dive on command injection, path traversal, SQL injection, NoSQL injection. Writes to `02-vulnerabilities/deep-dive/*.md`.
 2. Delegate to **security-vuln-common** — normal-depth analysis on XXE, XSS, SSRF, security misconfiguration. Writes to `02-vulnerabilities/common/*.md`.
-3. Delegate to **security-vuln-sca** — software component analysis. Writes to `02-vulnerabilities/sca/components.md`.
+3. Delegate to **security-vuln-bizlogic** — business-logic and authorization analysis: authentication bypass, MFA bypass, transaction-logic flaws (financial impact), and business-logic flaws (IDOR, mass assignment, state machine bypass, multi-step workflow shortcuts). Writes to `02-vulnerabilities/bizlogic/*.md`.
+4. Delegate to **security-vuln-sca** — software component analysis. Writes to `02-vulnerabilities/sca/components.md`.
 
-After each delegation, verify the expected output files exist and try to append a run-log entry. **If the run-log append fails, do not stop.** Buffer the line and move to the next subagent. Per Hard Rule #6, the run log is best-effort.
+After each delegation, verify the expected output files exist and try to append a run-log entry. Apply the same tiered verification as Step 1: at minimum the subagent's primary output file (e.g. `02-vulnerabilities/sca/components.md`) must exist and be non-empty; if some sub-files for the deep-dive or common subagent are missing (e.g. `nosql-injection.md` is absent because no NoSQL stores were detected), that is acceptable — log the gap and proceed. The subagents are encouraged to write artifacts incrementally and to use `## Coverage gaps` sections rather than producing nothing. **If the run-log append fails, do not stop.** Buffer the line and move to the next subagent.
 
 ### Step 3 — Final report (you do this yourself, no delegation)
 Stitch a `final-report.md` that contains:
