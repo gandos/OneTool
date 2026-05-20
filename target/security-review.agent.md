@@ -51,7 +51,7 @@ All outputs live under `.security-review/` at the repo root. Create this directo
 │   │   └── business-logic.md
 │   └── sca/
 │       └── components.md
-└── final-report.md
+└── final-report.html       # produced by the security-report subagent in Step 3
 ```
 
 Every finding file uses this schema (one block per finding). **All fields are mandatory.** If a field cannot be filled, write `n/a` with a one-line reason — do not omit the field.
@@ -134,15 +134,14 @@ Run these in sequence (not parallel — the user's VS Code 1.106 runs subagents 
 
 After each delegation, verify the expected output files exist and try to append a run-log entry. Apply the same tiered verification as Step 1: at minimum the subagent's primary output file (e.g. `02-vulnerabilities/sca/components.md`) must exist and be non-empty; if some sub-files for the deep-dive or common subagent are missing (e.g. `nosql-injection.md` is absent because no NoSQL stores were detected), that is acceptable — log the gap and proceed. The subagents are encouraged to write artifacts incrementally and to use `## Coverage gaps` sections rather than producing nothing. **If the run-log append fails, do not stop.** Buffer the line and move to the next subagent.
 
-### Step 3 — Final report (you do this yourself, no delegation)
-Stitch a `final-report.md` that contains:
-- Executive summary (1 paragraph) with totals by severity.
-- Top-5 findings table with SEC-ID, severity, title, location.
-- "Full findings by class" section that links to every finding file.
-- "Reconnaissance snapshot" section that transcludes `01-reconnaissance/INDEX.md`.
-- "Methodology & caveats" — which subagent ran which step, what was out of scope.
+### Step 3 — Final HTML report
+- Delegate to the **security-report** subagent.
+- Tell it: "Aggregate every artifact under `.security-review/` into a single self-contained HTML report at `.security-review/final-report.html`. Do not re-analyze, do not invent data, follow the layout and cross-link conventions in your agent file. The report must be openable offline by double-click — embedded CSS only, no external assets."
+- After it returns, verify `final-report.html` exists and is non-empty. If missing or empty, re-delegate once with a reminder that the output path is mandatory. If still missing, stop and surface the error to the user with the agent's status output.
+- Verify the agent's returned summary contains a `Broken cross-links: 0` line. If broken links exist, re-delegate once asking it to fix the dangling anchors (typical causes: an Endpoint field references an EP-ID that recon didn't enumerate, or a SEC-ID was misspelled in a finding's cross-reference).
+- Try to append a run-log entry for this step; if the append fails, hold it in memory per Hard Rule #6 and proceed.
 
-Do **not** re-run any analysis in Step 3; only aggregate.
+Do **not** re-run any analysis in Step 3; the report subagent only aggregates.
 
 ## Delegation style
 
