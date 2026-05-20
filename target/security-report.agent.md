@@ -162,23 +162,55 @@ Each TOC entry is an in-page anchor link. Indent sub-items under "Findings by Cl
 
 ### CSS — required pieces
 
-Embed a single `<style>` block in `<head>`. Keep it ~150 lines, no frameworks. Required pieces:
+Embed a single `<style>` block in `<head>`. Target ~100 lines, no frameworks. Use the following CSS verbatim as the foundation — it is layout-tested and the `main { min-width: 0 }` line in particular is mandatory (without it, wide code blocks inside `<main>` will overflow the grid track and visually push main off the viewport, leaving only the TOC visible):
 
-- System font stack on `body`: `font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.55;`
-- Two-pane CSS Grid layout for `.container`.
-- `.toc` is sticky on desktop, lists styled cleanly with indent for nested items.
-- `.finding` cards: 1px subtle border, 1rem padding, 1rem bottom margin, **4px-thick left border** colored by severity class. Use these muted colors (severity is signaled ONLY via this left border, no badges):
-  - `.sev-critical` → `border-left-color: #8b0000;`
-  - `.sev-high` → `#c0392b;`
-  - `.sev-medium` → `#b7950b;`
-  - `.sev-low` → `#1f618d;`
-  - `.sev-info` → `#566573;`
-- `.finding-meta` flows inline, `<strong>` labels are not bolded heavier than 600.
-- `details > summary` styled with `cursor: pointer`, slight padding, hover background `#f0f0f0`.
-- `pre, code` use `font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;` with light gray background `#f5f5f5`, padding, `overflow-x: auto` on `<pre>`.
-- `table` collapses borders, has zebra striping (`tr:nth-child(even)`), and `overflow-x: auto` on a wrapper for wide tables (endpoint summary).
-- `.related-findings` rendered with a left rule and slightly smaller font.
-- Mobile media query and print media query as specified above.
+```css
+* { box-sizing: border-box; }
+body { margin: 0; padding: 1rem 1.5rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.55; color: #222; }
+header { margin-bottom: 1.5rem; border-bottom: 1px solid #ddd; padding-bottom: 1rem; }
+h1, h2, h3, h4 { line-height: 1.25; margin-top: 1.5rem; }
+.container { display: grid; grid-template-columns: 260px 1fr; gap: 2rem; align-items: start; }
+.toc { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; font-size: 0.9rem; }
+.toc ul { list-style: none; padding-left: 0; }
+.toc ul ul { padding-left: 1rem; }
+.toc a { text-decoration: none; color: #1f618d; display: block; padding: 0.15rem 0; }
+.toc a:hover { text-decoration: underline; }
+main { min-width: 0; }                       /* MANDATORY — prevents grid blowout */
+main section { margin-bottom: 2.5rem; }
+.finding { border: 1px solid #ddd; border-left-width: 4px; padding: 1rem 1.25rem; margin-bottom: 1rem; border-radius: 2px; }
+.sev-critical { border-left-color: #8b0000; }
+.sev-high     { border-left-color: #c0392b; }
+.sev-medium   { border-left-color: #b7950b; }
+.sev-low      { border-left-color: #1f618d; }
+.sev-info     { border-left-color: #566573; }
+.finding-meta { font-size: 0.92rem; color: #444; }
+details { margin: 0.5rem 0; }
+details > summary { cursor: pointer; padding: 0.25rem 0.5rem; background: #f5f5f5; border-radius: 2px; }
+details > summary:hover { background: #ececec; }
+details > div, details > pre, details > p { padding: 0.5rem; }
+code { font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; background: #f5f5f5; padding: 0.05rem 0.3rem; border-radius: 2px; font-size: 0.9em; }
+pre { background: #f5f5f5; padding: 0.75rem; border-radius: 2px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1rem; font-size: 0.92rem; }
+th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+tr:nth-child(even) td { background: #fafafa; }
+.table-wrapper { overflow-x: auto; }         /* wrap wide tables — endpoint summary */
+.related-findings { border-left: 3px solid #ddd; padding-left: 0.75rem; margin-top: 1rem; font-size: 0.92rem; }
+#back-to-top { position: fixed; bottom: 1.5rem; right: 1.5rem; display: none; padding: 0.5rem 0.75rem; background: #333; color: #fff; text-decoration: none; border-radius: 3px; }
+@media (max-width: 768px) {
+  .container { grid-template-columns: 1fr; }
+  .toc { position: static; max-height: none; overflow: visible; }
+}
+@media print {
+  .toc, #back-to-top { display: none; }
+  .container { grid-template-columns: 1fr; }
+  details:not([open]) > *:not(summary) { display: block !important; }
+  details > summary { list-style: none; cursor: default; }
+  .finding { page-break-inside: avoid; }
+}
+```
+
+You may add small tweaks (heading sizes, comment colors, spacing) but **do not remove** any of the layout-critical rules: the grid declaration on `.container`, `align-items: start`, `min-width: 0` on `main`, and the mobile/print media queries.
 
 ### JS — strictly limited
 
@@ -188,26 +220,148 @@ You MAY include up to ~50 lines of vanilla JS in a single `<script>` tag at end 
 
 No other JS. No frameworks. No fetch calls.
 
+### Skeleton template — use this exact structure for Phase 3
+
+The Phase 3 skeleton write should produce a document shaped like the template below. Fill the TOC links and the `<header>` contents in the skeleton (they're small and fixed). Leave each top-level `<section>` body as a `<!-- pending -->` marker so Phase 4 edits can find it. The TOC must already contain all final links — it ships in the skeleton because it's small.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security Review Report — <repo-name></title>
+<style>/* the CSS block from "CSS — required pieces" goes here */</style>
+</head>
+<body>
+<header>
+  <h1>Security Review Report</h1>
+  <p><strong>Repository:</strong> <repo-name> &nbsp;|&nbsp; <strong>Generated:</strong> <timestamp from scope.md></p>
+  <p><strong>Modules:</strong> ... &nbsp;|&nbsp; <strong>Languages:</strong> ...</p>
+</header>
+<div class="container">
+  <aside class="toc">
+    <nav>
+      <h2>Contents</h2>
+      <ul>
+        <li><a href="#executive-summary">Executive Summary</a></li>
+        <li><a href="#immediate-attention">Findings Requiring Immediate Attention</a></li>
+        <li><a href="#findings-by-class">Findings by Class</a>
+          <ul>
+            <li><a href="#findings-injection">Injection</a></li>
+            <li><a href="#findings-common">Common Web</a></li>
+            <li><a href="#findings-bizlogic">Business Logic</a></li>
+            <li><a href="#findings-sca">Software Component Analysis</a></li>
+          </ul>
+        </li>
+        <li><a href="#appendix-a">Appendix A — Application Profile</a></li>
+        <li><a href="#appendix-b">Appendix B — Endpoints and Data Flow</a></li>
+        <li><a href="#appendix-c">Appendix C — Datastores</a></li>
+        <li><a href="#appendix-d">Appendix D — External Services</a></li>
+        <li><a href="#methodology">Methodology</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <main>
+    <section id="executive-summary"><h2>Executive Summary</h2><!-- pending --></section>
+    <section id="immediate-attention"><h2>Findings Requiring Immediate Attention</h2><!-- pending --></section>
+    <section id="findings-by-class"><h2>Findings by Class</h2>
+      <section id="findings-injection"><h3>Injection</h3><!-- pending --></section>
+      <section id="findings-common"><h3>Common Web</h3><!-- pending --></section>
+      <section id="findings-bizlogic"><h3>Business Logic</h3><!-- pending --></section>
+      <section id="findings-sca"><h3>Software Component Analysis</h3><!-- pending --></section>
+    </section>
+    <section id="appendix-a"><h2>Appendix A — Application Profile</h2><!-- pending --></section>
+    <section id="appendix-b"><h2>Appendix B — Endpoints and Data Flow</h2><!-- pending --></section>
+    <section id="appendix-c"><h2>Appendix C — Datastores</h2><!-- pending --></section>
+    <section id="appendix-d"><h2>Appendix D — External Services</h2><!-- pending --></section>
+    <section id="methodology"><h2>Methodology</h2><!-- pending --></section>
+  </main>
+</div>
+<a id="back-to-top" href="#">Back to top</a>
+<script>
+(function(){
+  // open parent <details> when navigating to a nested anchor
+  function openHashAncestors(){
+    var el = document.getElementById((location.hash||'').slice(1));
+    while(el){ if(el.tagName==='DETAILS') el.open = true; el = el.parentElement; }
+  }
+  window.addEventListener('hashchange', openHashAncestors);
+  document.addEventListener('DOMContentLoaded', openHashAncestors);
+  // back-to-top
+  var btn = document.getElementById('back-to-top');
+  window.addEventListener('scroll', function(){ btn.style.display = window.scrollY > 600 ? 'block' : 'none'; });
+  btn && btn.addEventListener('click', function(e){ e.preventDefault(); window.scrollTo({top:0,behavior:'smooth'}); });
+})();
+</script>
+</body>
+</html>
+```
+
+This skeleton is ~3 KB and ships in a single Edit operation. Phase 4 then replaces each `<!-- pending -->` marker with the rendered section content. A reviewer opening the report mid-way through Phase 4 sees a valid HTML document with some sections still showing as "pending" — that is the intended fallback behavior.
+
 ## Workflow
 
-1. **Inventory phase** — list which artifact files exist under `.security-review/`. Echo a one-line status:
-   `Inventory: recon=<count> files, vuln=<count> findings across <N> files.`
-2. **Parse phase** — for each `02-vulnerabilities/**/*.md` file, split on `^## SEC-` boundaries and extract every field. Build a list of finding objects. Build a map `endpoint_id -> [SEC-IDs]`.
-3. **Render phase** — emit the HTML according to the layout. Escape user content. Compute Top-5 by sorting findings by severity rank (Critical=5, High=4, Medium=3, Low=2, Info=1) then by SEC-ID ascending.
-4. **Self-check phase** — before saving, verify and echo each check:
-   - Every `href="#..."` target exists as an `id="..."` in the document. List broken links if any.
-   - Every Critical/High finding appears in `#immediate-attention`.
-   - Every EP-ID referenced by a finding's Endpoint field exists in Appendix B.
-   - The file has no `http://` or `https://` references except inside finding Reference URLs (those are allowed but should open in a new tab via `target="_blank" rel="noopener noreferrer"`).
-   - No `<link>`, no `<script src=>`, no `<img src="http...">`.
-5. **Save** to `.security-review/final-report.html`.
-6. **Return** a short summary to the orchestrator:
-   ```
-   Report written: .security-review/final-report.html
-   Findings: Critical=X, High=Y, Medium=Z, Low=W, Info=V (total N)
-   Endpoints documented: <count>
-   Broken cross-links: <count> (should be 0)
-   ```
+> **Critical generation strategy.** A complete HTML report (head + CSS + TOC + every finding card + every endpoint detail + appendices) is too large to emit in a single tool call — the output truncates partway through, typically right after the TOC, leaving the page visually blank to the right of the sidebar. **You MUST NOT generate the full HTML in one write.** Instead, follow the Skeleton-then-Populate strategy below. Every successful run of this agent uses this strategy. No exceptions.
+
+### Phase 1 — Inventory
+List which artifact files exist under `.security-review/`. Echo a one-line status:
+`Inventory: recon=<count> files, vuln=<count> findings across <N> files.`
+
+### Phase 2 — Parse
+For each `02-vulnerabilities/**/*.md` file, split on `^## SEC-` boundaries and extract every field. Build a list of finding objects in memory. Build a map `endpoint_id -> [SEC-IDs]` for the related-findings backlinks. Sort findings by severity rank (Critical=5, High=4, Medium=3, Low=2, Info=1) then by SEC-ID ascending — store this sort order for use in the Top-5 and immediate-attention sections.
+
+### Phase 3 — Write the skeleton (single small write)
+Create `.security-review/final-report.html` with the **complete document scaffold but empty content placeholders**. This file MUST contain: full `<!DOCTYPE html>`, `<head>` with all CSS, `<header>` with header text, `<div class="container">` wrapping `<aside class="toc">` (with the full TOC links — TOC is small enough to ship in the skeleton) and `<main>` (with empty `<section>` placeholders for each top-level section), closing `</main></div>`, the `<script>` block, and closing `</body></html>`.
+
+The skeleton must include these section placeholders, each as `<section id="..."><!-- pending --></section>`:
+- `executive-summary`
+- `immediate-attention`
+- `findings-by-class` (with empty child placeholders for `findings-injection`, `findings-common`, `findings-bizlogic`, `findings-sca`)
+- `appendix-a`
+- `appendix-b`
+- `appendix-c`
+- `appendix-d`
+- `methodology`
+
+After this write, the file must be a valid HTML document that already renders (with empty sections) and already ends with `</html>`. Verify this by checking that the file ends with `</html>` before proceeding.
+
+### Phase 4 — Populate sections via Edit operations (the bulk of the work)
+For each placeholder, perform a separate `edit/editFiles` Edit operation that **replaces the `<!-- pending -->` marker** for that section with the rendered content. Order:
+
+1. `#executive-summary` — application profile paragraph + finding totals line + Top-5 table.
+2. `#immediate-attention` — table of Critical + High findings.
+3. `#findings-injection`, then `#findings-common`, then `#findings-bizlogic`, then `#findings-sca` — one Edit operation per sub-class group. If a sub-class has more than ~15 findings, split it into multiple Edit operations (e.g. first batch inserts findings SEC-001..SEC-015, second batch appends SEC-016..SEC-030 by replacing a `<!-- batch-N pending -->` marker you leave at the end of the previous batch).
+4. `#appendix-a` — Application Profile.
+5. `#appendix-b` — Endpoints and Data Flow. Each endpoint detail block is its own logical unit; if Appendix B is large (>30 endpoints), do it in batches the same way as findings.
+6. `#appendix-c` — Datastores.
+7. `#appendix-d` — External Services.
+8. `#methodology` — Methodology, coverage gaps, run log.
+
+After every Edit, **the file must still end with `</html>`**. If an edit fails or truncates, retry that single edit with a smaller payload (e.g. fewer findings per batch). Do NOT continue to the next section if the previous edit left the file malformed.
+
+### Phase 5 — Self-check
+Read the saved file back. Verify and echo each check:
+- File ends with `</html>` and contains exactly one occurrence of `<!DOCTYPE html>` and `</body>`.
+- Every top-level section id (`executive-summary`, `immediate-attention`, `findings-by-class`, `appendix-a` through `appendix-d`, `methodology`) is present and the section is non-empty (no `<!-- pending -->` markers left behind).
+- Every `href="#xxx"` target exists as an `id="xxx"` in the document. List any broken links.
+- Every Critical/High finding (as identified in Phase 2) appears in `#immediate-attention`.
+- Every EP-ID referenced by a finding's Endpoint metadata exists as an `id` in Appendix B.
+- No `<link rel="stylesheet">`, no `<script src=>`, no `<img src="http...">`. External reference URLs inside finding `References:` fields are allowed but must have `target="_blank" rel="noopener noreferrer"`.
+- File size is at least 15 KB (sanity-check for "did the content actually get written"). If smaller, something went wrong — re-run from Phase 3.
+
+If any check fails, fix the file (additional Edit operations) before returning.
+
+### Phase 6 — Return
+A short summary to the orchestrator, exactly this format:
+```
+Report written: .security-review/final-report.html
+Findings: Critical=X, High=Y, Medium=Z, Low=W, Info=V (total N)
+Endpoints documented: <count>
+Pending markers remaining: <count> (must be 0)
+Broken cross-links: <count> (must be 0)
+File size: <KB>
+```
 
 ## Output discipline
 
